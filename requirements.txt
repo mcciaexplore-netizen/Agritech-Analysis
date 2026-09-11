@@ -1,0 +1,74 @@
+import os
+from pydantic import BaseModel, Field
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+from langchain_community.vectorstores import FAISS
+
+# ---------------------------------------------------------------------------
+# 1. Define Output Schema
+# ---------------------------------------------------------------------------
+class FinancialMetrics(BaseModel):
+    revenue: str = Field(description="Revenue or Total Sales reported, with currency and period if available, or 'N/A' if not present.")
+    gross_profit: str = Field(description="Gross Profit reported, or 'N/A' if not present.")
+    net_profit: str = Field(description="Net Profit, Net Income, or Loss reported, or 'N/A' if not present.")
+    pre_revenue_status: str = Field(description="Indicates whether the company is pre-revenue (e.g., 'Yes', 'No', or details on current stage), or 'N/A' if not mentioned.")
+
+# ---------------------------------------------------------------------------
+# 2. Extract Context using PyPDF + FAISS
+# ---------------------------------------------------------------------------
+def extract_financials(pdf_path: str) -> FinancialMetrics:
+    # Load PDF
+    loader = PyPDFLoader(pdf_path)
+    documents = loader.load()
+
+    # Split into manageable chunks
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000,
+        chunk_overlap=150
+    )
+    chunks = text_splitter.split_documents(documents)
+
+    # Embed and index with FAISS
+    embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
+    vector_store = FAISS.from_documents(chunks, embeddings)
+
+    # Target financial keywords specifically
+    query = "financial statements income statement revenue sales gross profit net profit net income pre-revenue stage earnings"
+    relevant_docs = vector_store.similarity_search(query, k=5)
+    
+    # Combine retrieved context
+    context = "\n\n".join([doc.page_content for doc.page_content in relevant_docs])
+
+    # ---------------------------------------------------------------------------
+    # 3. Process Context with Structured Output LLM
+    # ---------------------------------------------------------------------------
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+    structured_llm = llm.with_structured_output(FinancialMetrics)
+
+    prompt = f"""
+    You are an expert financial analyst. Analyze the following document context extracted from a report.
+    Extract the requested financial metrics precisely as stated in the text. 
+    If a metric is missing, explicitly state "N/A".
+
+    Context:
+    {context}
+    """
+
+    return structured_llm.invoke(prompt)
+
+# ---------------------------------------------------------------------------
+# Execution Example
+# ---------------------------------------------------------------------------
+if __name__ == "__main__":
+    pdf_file = "financial_report.pdf"  # Replace with your PDF path
+    
+    if os.path.exists(pdf_file):
+        result = extract_financials(pdf_file)
+        print("Extracted Financial Metrics:")
+        print(f"Revenue: {result.revenue}")
+        print(f"Gross Profit: {result.gross_profit}")
+        print(f"Net Profit: {result.net_profit}")
+        print(f"Pre-Revenue Status: {result.pre_revenue_status}")
+    else:
+        print(f"File '{pdf_file}' not found. Provide a valid path.")

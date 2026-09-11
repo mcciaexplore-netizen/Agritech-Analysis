@@ -1,0 +1,132 @@
+========================================
+FILE: A-CROP-CUTTER-MECHANISM - Bhausaheb Shinde.pptx
+========================================
+--- Slide 1 ---
+A CROP CUTTER MECHANISM
+Shinde Bhausaheb [BE. Mech]
+--- Slide 2 ---
+Problem statement
+Crop Removal
+Remove crops with roots and trunk without causing any damage (e.g., jowar, maize, bajra).
+Crop Waste Collection
+Crop waste collection, such as wheat and rice, is currently handled by boring methods, which contribute to increased air pollution and a reduction in carbon percentage in the soil.
+Sustainable Harvesting
+The goal is to develop a solution that can efficiently remove crops while minimizing damage and addressing the issue of crop waste collection in an environmentally-friendly manner.
+--- Slide 3 ---
+Solution:
+1
+Crops are cut underground
+At this stage, the first step is to remove the crop from the soil. Three types of mechanisms are used in this machine: a swinging mechanism, spring-connected teeth.
+2
+Collection the harvested crop
+First, reduce the speed of each conveyor step. Next, pick up the cut and improperly arranged crop. We use torsion springs in this machine to collect the harvested crop. As well as use by left or slider.
+--- Slide 4 ---
+--- Slide 5 ---
+Market Opportunity
+TAM
+SAM
+SOM
+8.4 lakh
+3 lakh
+35 thousands
+--- Slide 6 ---
+Competitive Analysis
+Existing Solutions
+Combine harvesters and power tillers are currently used to harvest crops from above ground.
+Innovative Approach
+This project utilizes a new technology, such as a swinging mechanism, to remove crops with roots and trunks without causing damage.
+Unique Features
+The project can simultaneously harvest crops and collect crop waste, reducing air pollution and improving soil quality.
+Competitive Advantage
+This project has been granted a patent and there is currently no similar work product present in the agriculture industry.
+--- Slide 7 ---
+Technology & Innovation, Development
+Currently, we have achieved the first stage and the second stage in the process. In the first stage, achieve 50 to 60 percent aquaresis. In this stage remove the crop with trunks and roots.
+--- Slide 8 ---
+market analysis
+Parameters
+Combine Harvester
+Tractor
+Power Tiller
+Traditional (Manual)
+Method used
+Mechanical
+Mechanical
+Mechanical
+Manual
+Power Source
+tractor
+self
+engine
+manual
+Lab our charge, Rs/day/man
+2000
+800
+800
+400/600
+Total number of labors required per hectare
+3
+2
+2
+30
+Actual time required, h/ha
+1 hr
+2 hr
+2:30 hr
+10 hr
+Total cost of labor required, Rs/ha
+200
+200
+200
+15000
+Charges of mechanic
+9500
+5000
+2500
+15000
+Total cost
+11500
+5800
+3300
+15000
+--- Slide 9 ---
+Marketing and Sales Strategy
+Arrange meetings with Farmers
+Arrange meetings with farmers to understand their problems and explain the solution.
+Understand the problem and then explain
+Spend time understanding the farmers' problems in depth, and then clearly explain how the solution can address those issues.
+Increase contacts
+Actively work to increase the number of farmer contacts and connections to expand the potential customer base.
+Provide demos
+Offer demonstrations of the product to potential customers so they can see how it works and understand the benefits.
+Get feedback from tractor drivers
+Talk to tractor drivers and ask for their feedback on the product, as they will be the ones using it in the field.
+Identify important changes
+Based on the feedback received, identify any important changes or modifications that should be made to the product to better meet the needs of the farmers.
+--- Slide 10 ---
+Current status of the startup
+Patent Granted
+Re-Design
+Test
+Design of project
+--- Slide 11 ---
+Business & Revenue Model
+Product:-  1.20  to 1.35 Lakh (Selling Price)
+Manufacturing Price:- 75-80 thousands
+Marketing:-  5 thousands
+--- Slide 12 ---
+Funding Details
+Self Invested 1.9 lakh
+3.6 lakh From DST NIDHI EIR 2023-24 Scheme at Bhau Institute COEP, Pune.
+--- Slide 13 ---
+Team, Advisors, Mentors
+Founder Mr. Shinde Bhausaheb
+BE mech.
+Mentor
+Mr. Gite Abhay
+Labor Officer, Pune.
+bhauahebshinde252@gmail.com
+9130930584
+Bhau Institute, Near Boat Club, COEP, Pune-411005
+
+
