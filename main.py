@@ -6,6 +6,7 @@ import warnings
 # Suppress deprecation warnings from LangChain ecosystem
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -26,7 +27,23 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+                
+from langchain_groq import ChatGroq
 
+
+load_dotenv()  # Load environment variables from .env file
+
+
+
+# Get API key from environment variables
+groq_api_key = os.getenv("GROQ_API_KEY")
+
+# Initialize LLM via Cloud API
+llm = ChatGroq(
+    model="llama-3.1-8b-instant",  # Cloud-hosted Llama 3.1 model
+    temperature=0,
+    api_key=groq_api_key
+)
 # ---------------------------------------------------------------------------
 # 1. Target Extraction Schema
 # ---------------------------------------------------------------------------
@@ -85,7 +102,25 @@ async def extract_metrics(file: UploadFile = File(...)):
         context = "\n\n".join([doc.page_content for doc in relevant_docs])
 
         # LLM Inference
-        llm = ChatOllama(model="llama3.1", temperature=0)
+        #llm = ChatOllama(model="llama3.1", temperature=0)
+
+        OLLAMA_PUBLIC_URL = os.getenv("OLLAMA_BASE_URL", "https://implicate-italics-wharf.ngrok-free.dev")
+
+        llm = ChatOllama(
+    model="llama3.1",
+    temperature=0,
+    base_url=OLLAMA_PUBLIC_URL,
+    client_kwargs={
+        "headers": {
+            "ngrok-skip-browser-warning": "true"
+        }
+    }
+)
+
+
+
+
+
         structured_llm = llm.with_structured_output(FinancialMetrics)
 
         prompt = f"""
