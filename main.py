@@ -65,15 +65,29 @@ async def extract_metrics(file: UploadFile = File(...)):
         raw_text = extract_full_text(tmp_path, file_ext)
 
         # Cap text length safely to fit within Ollama's local context window (~35k chars)
+       # Cap text length safely to fit within context window
         max_chars = 35000 
         context_text = raw_text[:max_chars]
 
-        # Bind directly to your local computer's Ollama instance
-        ollama_url = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+        # Fetch environment variable or fallback to active ngrok tunnel
+        raw_url = os.getenv("OLLAMA_BASE_URL", "https://implicate-italics-wharf.ngrok-free.dev")
+        
+        # Clean quotes, spaces, and formatting
+        clean_url = raw_url.strip().strip("'").strip('"').strip()
+        if not clean_url.startswith(("http://", "https://")):
+            clean_url = f"https://{clean_url}"
+        clean_url = clean_url.rstrip("/")
+
+        # Initialize ChatOllama with ngrok header bypass
         llm = ChatOllama(
             model="llama3.1:8b",
-            base_url=ollama_url,
-            temperature=0
+            base_url=clean_url,
+            temperature=0,
+            client_kwargs={
+                "headers": {
+                    "ngrok-skip-browser-warning": "true"
+                }
+            }
         )
 
         structured_llm = llm.with_structured_output(FinancialMetrics)
