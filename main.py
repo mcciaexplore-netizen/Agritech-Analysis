@@ -1,19 +1,21 @@
-﻿import os
+import os
 import json
 import tempfile
 import warnings
-
-warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from langchain_ollama import ChatOllama
-
-from content import extract_pdf_text, extract_ppt_text
+from starlette.concurrency import run_in_threadpool
 
 load_dotenv()
+
+from groq_extractor import extract_with_groq
+from content import extract_ppt_text
+from paddle_pdf import extract_pdf_with_ocr
+
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 app = FastAPI()
 
@@ -24,98 +26,136 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # ---------------------------------------------------------------------------
 # 1. Target Extraction Schema
 # ---------------------------------------------------------------------------
+
 class FinancialMetrics(BaseModel):
-    startup_name: str = Field(description="Name of the startup/Company, or 'N/A' if missing.")
-    profit_loss: str = Field(description="Net profit, net loss, or net income reported, or 'N/A' if missing.")
-    gross_profit: str = Field(description="Gross Profit reported, or 'N/A' if missing.")
-    stage_of_startup: str = Field(description="Current stage of the startup (e.g., Idea, Seed, Early-stage, Growth, Pre-revenue), or 'N/A' if missing.")
-    revenue_generation: str = Field(description="Details on revenue generated, total sales, or monetization model, or 'N/A' if missing.")
-    pre_revenue: str = Field(description="Explicitly state whether the startup is pre-revenue (e.g., 'Yes', 'No', or details provided), or 'N/A' if missing.")
-    pre_revenue_amount: str = Field(description="If pre-revenue, specify the amount of revenue generated and summarize pre-revenue funding received so far. If missing, return 'N/A'.")
-    Financial_ask: str = Field(description="Financial ask or funding request details, or 'N/A' if missing.")
+    startup_name: str = Field(
+        description="Name of the startup/company, or 'N/A' if missing."
+    )
+    profit_loss: str = Field(
+        description=(
+            "Net profit, net loss, or net income reported, "
+            "or 'N/A' if missing."
+        )
+    )
+    gross_profit: str = Field(
+        description="Gross profit reported, or 'N/A' if missing."
+    )
+    stage_of_startup: str = Field(
+        description=(
+            "Current stage of the startup (e.g., Idea, Seed, Early-stage, "
+            "Growth, Pre-revenue), or 'N/A' if missing."
+        )
+    )
+    revenue_generation: str = Field(
+        description=(
+            "Details on revenue generated, total sales, or monetization "
+            "model, or 'N/A' if missing."
+        )
+    )
+    pre_revenue: str = Field(
+        description=(
+            "Explicitly state whether the startup is pre-revenue "
+            "(e.g., 'Yes', 'No', or details provided), or 'N/A' if missing."
+        )
+    )
+    pre_revenue_amount: str = Field(
+        description=(
+            "If pre-revenue, specify the amount of revenue generated and "
+            "summarize pre-revenue funding received so far. "
+            "If missing, return 'N/A'."
+        )
+    )
+    Financial_ask: str = Field(
+        description="Financial ask or funding request details, or 'N/A' if missing."
+    )
+
 
 # ---------------------------------------------------------------------------
 # 2. Document Text Extractor
 # ---------------------------------------------------------------------------
+
 def extract_full_text(file_path: str, file_ext: str) -> str:
     if file_ext == "pdf":
-        return extract_pdf_text(file_path)
-    elif file_ext in ["ppt", "pptx"]:
+        return extract_pdf_with_ocr(file_path)
+
+    if file_ext == "pptx":
         return extract_ppt_text(file_path)
-    else:
-        raise ValueError(f"Unsupported file format extension: .{file_ext}")
+
+    raise ValueError(f"Unsupported file format: .{file_ext}")
+
 
 # ---------------------------------------------------------------------------
 # 3. Extraction Endpoint
 # ---------------------------------------------------------------------------
+
 @app.post("/extract")
 async def extract_metrics(file: UploadFile = File(...)):
-    file_ext = file.filename.split(".")[-1].lower()
-    if file_ext not in ["pdf", "ppt", "pptx"]:
-        raise HTTPException(status_code=400, detail="Invalid file type.")
+    # Keep only the filename, excluding any supplied directory path.
+    filename = os.path.basename(
+        (file.filename or "").replace("\\", "/")
+    )
+    file_ext = os.path.splitext(filename)[1].lower().lstrip(".")
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_ext}") as tmp:
-        tmp.write(await file.read())
-        tmp_path = tmp.name
-
-    try:
-        raw_text = extract_full_text(tmp_path, file_ext)
-
-        # Cap text length safely to fit within Ollama's local context window (~35k chars)
-       # Cap text length safely to fit within context window
-        max_chars = 35000 
-        context_text = raw_text[:max_chars]
-
-        # Fetch environment variable or fallback to active ngrok tunnel
-        raw_url = os.getenv("OLLAMA_BASE_URL", "https://implicate-italics-wharf.ngrok-free.dev")
-        
-        # Clean quotes, spaces, and formatting
-        clean_url = raw_url.strip().strip("'").strip('"').strip()
-        if not clean_url.startswith(("http://", "https://")):
-            clean_url = f"https://{clean_url}"
-        clean_url = clean_url.rstrip("/")
-
-        # Initialize ChatOllama with ngrok header bypass
-        llm = ChatOllama(
-            model="llama3.1:8b",
-            base_url=clean_url,
-            temperature=0,
-            client_kwargs={
-                "headers": {
-                    "ngrok-skip-browser-warning": "true"
-                }
-            }
+    if file_ext not in {"pdf", "pptx"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Upload a PDF or PPTX file. Convert older PPT files to PPTX.",
         )
 
-        structured_llm = llm.with_structured_output(FinancialMetrics)
+    tmp_path = None
 
-        prompt = f"""
-        You are an expert financial analyst. Analyze the following document context extracted from a report/presentation.
-        Extract the requested metrics precisely as stated in the text. 
-        If a metric or status is not explicitly mentioned, return "N/A".
+    try:
+        with tempfile.NamedTemporaryFile(
+            delete=False,
+            suffix=f".{file_ext}",
+        ) as tmp:
+            tmp_path = tmp.name
+            tmp.write(await file.read())
 
-        Document Content:
-        {context_text}
-        """
+        raw_text = await run_in_threadpool(
+            extract_full_text,
+            tmp_path,
+            file_ext,
+        )
 
-        result: FinancialMetrics = structured_llm.invoke(prompt)
+        if not raw_text.strip():
+            raise HTTPException(
+                status_code=422,
+                detail="No readable text was found in this document.",
+            )
+
+        # Process all extracted text in bounded chunks through Groq.
+        result: FinancialMetrics = await extract_with_groq(
+            raw_text,
+            FinancialMetrics,
+        )
+
         data_dict = result.model_dump()
 
         os.makedirs("data", exist_ok=True)
-        json_filename = f"{os.path.splitext(file.filename)[0]}_metrics.json"
+        json_filename = f"{os.path.splitext(filename)[0]}_metrics.json"
         json_path = os.path.join("data", json_filename)
-        with open(json_path, "w", encoding="utf-8") as f:
-            json.dump(data_dict, f, indent=4)
+
+        with open(json_path, "w", encoding="utf-8") as output_file:
+            json.dump(
+                data_dict,
+                output_file,
+                indent=4,
+                ensure_ascii=False,
+            )
 
         return {
-            "filename": file.filename,
+            "filename": filename,
             "saved_to": json_path,
-            "data": data_dict
+            "data": data_dict,
         }
 
     finally:
-        if os.path.exists(tmp_path):
+        if tmp_path and os.path.exists(tmp_path):
             os.remove(tmp_path)
+
+        await file.close()

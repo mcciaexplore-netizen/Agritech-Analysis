@@ -4,7 +4,7 @@ import { UploadCloud, FileText, Loader2, RefreshCw, Trash2, ArrowRight, CheckCir
 import "./App.css";
 
 // Dynamic API URL for local development and cloud production deployment
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8000").replace(/\/+$/, "");
 
 const App = () => {
   const [file, setFile] = useState(null);
@@ -17,8 +17,8 @@ const App = () => {
 
   const selectFile = (selected) => {
     if (!selected || loading) return;
-    if (!/\.(pdf|ppt|pptx)$/i.test(selected.name)) {
-      setError("Please choose a PDF, PPT or PPTX file.");
+    if (!/\.(pdf|pptx)$/i.test(selected.name)) {
+      setError("Please choose a PDF or PPTX file. Convert older PPT files to PPTX.");
       if (fileInput.current) fileInput.current.value = "";
       return;
     }
@@ -47,8 +47,14 @@ const App = () => {
     try {
       const response = await axios.post(`${API_BASE_URL}/extract`, formData);
       setResult(response.data);
-    } catch {
-      setError("Error processing file. Make sure backend service is running.");
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      setError(
+        typeof detail === "string" ? detail :
+        typeof detail?.message === "string" ? detail.message :
+        err.response ? "The server could not process this document. Please retry." :
+        "Cannot connect to the backend. Check that the API is running."
+      );
     } finally {
       setLoading(false);
     }
@@ -84,9 +90,9 @@ const App = () => {
             <span className="upload-icon"><UploadCloud size={32} strokeWidth={1.6} /></span>
             <h3>Drag & drop your file here</h3>
             <p>or browse your device to choose a document</p>
-            <input ref={fileInput} id="file-upload" className="file-input" type="file" accept=".pdf,.ppt,.pptx" disabled={loading} onChange={(event) => selectFile(event.target.files?.[0])} />
+            <input ref={fileInput} id="file-upload" className="file-input" type="file" accept=".pdf,.pptx" disabled={loading} onChange={(event) => selectFile(event.target.files?.[0])} />
             <button className="browse-button" type="button" disabled={loading} onClick={() => fileInput.current?.click()}>Browse files <ArrowRight size={16} /></button>
-            <span className="file-types">Supported formats: PDF, PPT, PPTX</span>
+            <span className="file-types">Supported formats: PDF, PPTX</span>
           </div>
 
           {file && <div className="selected-file">
