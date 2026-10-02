@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: agritech-backend
+    runtime: python
+    plan: free
+    region: singapore
+    buildCommand: >-
+      pip install -r requirements.txt &&
+      pip uninstall -y opencv-python &&
+      pip install --force-reinstall --no-deps opencv-python-headless
+    # One worker: OCR model + highlighted-PDF store live in this process.
+    startCommand: gunicorn main:app -k uvicorn.workers.UvicornWorker -w 1 --timeout 300 --bind 0.0.0.0:$PORT
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: GROQ_API_KEY
+        sync: false          # set in the Render dashboard, never commit
+      - key: GROQ_MODEL
+        value: openai/gpt-oss-20b
+      - key: OCR_ENGINE
+        value: rapid
+      - key: MAX_PAGES
+        value: "70"
+      - key: ALLOWED_ORIGINS
+        sync: false          # your frontend URL, e.g. https://agritech.vercel.app

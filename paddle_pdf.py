@@ -31,6 +31,7 @@ def get_ocr():
 def extract_pdf_with_ocr(
     file_path: str,
     force_ocr: bool = False,
+    max_pages: int | None = None,
 ) -> str:
     pages = []
 
@@ -38,6 +39,8 @@ def extract_pdf_with_ocr(
     with _ocr_lock:
         with pymupdf.open(file_path) as document:
             for page_number, page in enumerate(document, start=1):
+                if max_pages and page_number > max_pages:
+                    break
                 text = page.get_text("text").strip()
 
                 if force_ocr or not text:

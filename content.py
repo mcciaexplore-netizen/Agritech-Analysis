@@ -23,7 +23,7 @@ def extract_pdf_text(file_path: str) -> str:
     return "\n".join(text_blocks)
 
 
-def extract_ppt_text(file_path: str) -> str:
+def extract_ppt_text(file_path: str, max_slides: int | None = None) -> str:
     """Extract text and tables from a PPTX presentation."""
     presentation = Presentation(file_path)
     text_blocks = []
@@ -32,6 +32,9 @@ def extract_ppt_text(file_path: str) -> str:
         presentation.slides,
         start=1,
     ):
+        if max_slides and slide_number > max_slides:
+            break
+
         slide_blocks = []
 
         for shape in slide.shapes:

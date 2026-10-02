@@ -5,6 +5,7 @@ import warnings
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
@@ -13,18 +14,42 @@ load_dotenv()
 
 from groq_extractor import extract_with_groq
 from content import extract_ppt_text
-from paddle_pdf import extract_pdf_with_ocr
+from ocr_connector import extract_pdf
+from insights import build_insights, build_references, document_path, normalize_metrics, review_flags
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
+# Max pages (PDF) or slides (PPTX) read per document; 0 = unlimited.
+MAX_PAGES = int(os.getenv("MAX_PAGES", "70"))
+
 app = FastAPI()
+
+# CORS: set ALLOWED_ORIGINS to the deployed frontend URL(s), comma-separated,
+# e.g. https://agritech.vercel.app. Defaults to "*" for local development.
+# ALLOWED_ORIGIN_REGEX optionally allows preview URLs, e.g.
+# https://agritech-.*\.vercel\.app
+ALLOWED_ORIGINS = [
+    o.strip().rstrip("/")
+    for o in os.getenv("ALLOWED_ORIGINS", "*").split(",")
+    if o.strip()
+]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=os.getenv("ALLOWED_ORIGIN_REGEX") or None,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
+    max_age=600,
 )
+
+
+@app.get("/")
+@app.get("/health")
+async def health():
+    """Render health check; also lets the frontend verify the API is reachable."""
+    return {"status": "ok", "ocr_engine": os.getenv("OCR_ENGINE", "rapid"), "max_pages": MAX_PAGES}
 
 
 # ---------------------------------------------------------------------------
@@ -64,9 +89,9 @@ class FinancialMetrics(BaseModel):
     )
     pre_revenue_amount: str = Field(
         description=(
-            "If pre-revenue, specify the amount of revenue generated and "
-            "summarize pre-revenue funding received so far. "
-            "If missing, return 'N/A'."
+            "All money the startup has actually received so far: any revenue "
+            "plus every kind of funding (grants, equity, loans, awards, "
+            "subsidies), with amount and source. If none stated, return 'N/A'."
         )
     )
     Financial_ask: str = Field(
@@ -80,10 +105,10 @@ class FinancialMetrics(BaseModel):
 
 def extract_full_text(file_path: str, file_ext: str) -> str:
     if file_ext == "pdf":
-        return extract_pdf_with_ocr(file_path)
+        return extract_pdf(file_path, max_pages=MAX_PAGES)
 
     if file_ext == "pptx":
-        return extract_ppt_text(file_path)
+        return extract_ppt_text(file_path, max_slides=MAX_PAGES)
 
     raise ValueError(f"Unsupported file format: .{file_ext}")
 
@@ -134,7 +159,7 @@ async def extract_metrics(file: UploadFile = File(...)):
             FinancialMetrics,
         )
 
-        data_dict = result.model_dump()
+        data_dict = normalize_metrics(result.model_dump())
 
         os.makedirs("data", exist_ok=True)
         json_filename = f"{os.path.splitext(filename)[0]}_metrics.json"
@@ -148,10 +173,25 @@ async def extract_metrics(file: UploadFile = File(...)):
                 ensure_ascii=False,
             )
 
+        # Insight cards + fundability. A failure here (e.g. Groq rate limit)
+        # must not discard the financial metrics already extracted.
+        insights, insights_error = None, None
+        try:
+            insights = await build_insights(raw_text, data_dict)
+        except HTTPException as exc:
+            insights_error = exc.detail
+
+        review = review_flags(raw_text, data_dict, insights)
+        references = build_references(raw_text, data_dict, insights, review, tmp_path, file_ext)
+
         return {
             "filename": filename,
             "saved_to": json_path,
             "data": data_dict,
+            "insights": insights,
+            "insights_error": insights_error,
+            "review": review,
+            "references": references,
         }
 
     finally:
@@ -159,3 +199,12 @@ async def extract_metrics(file: UploadFile = File(...)):
             os.remove(tmp_path)
 
         await file.close()
+
+
+@app.get("/documents/{doc_id}")
+async def get_document(doc_id: str):
+    """Serve the yellow-highlighted PDF copy produced for an upload."""
+    path = document_path(doc_id)
+    if not path:
+        raise HTTPException(status_code=404, detail="Document not found or expired.")
+    return FileResponse(path, media_type="application/pdf")
